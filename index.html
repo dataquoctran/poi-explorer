@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Twin Cities POI Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3248;
+    --accent: #4f8ef7;
+    --text: #e8eaf0;
+    --muted: #6b7399;
+    --font: 'DM Sans', sans-serif;
+  }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: grid;
+    grid-template-rows: 54px 1fr;
+    grid-template-columns: 360px 1fr;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    grid-column: 1 / -1;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 12px;
+  }
+  header h1 { font-size: 15px; font-weight: 600; }
+  header span { font-size: 12px; color: var(--muted); }
+  .header-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+  /* ── Sidebar ── */
+  aside {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+
+  /* ── Inputs ── */
+  input, select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 7px 10px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12px;
+    width: 100%;
+    transition: border-color 0.2s;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  input::placeholder { color: var(--muted); }
+  select option { background: var(--surface2); }
+
+  /* ── Buttons ── */
+  .btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn.ghost {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Location row ── */
+  .loc-row { display: flex; gap: 6px; }
+  .loc-row input { flex: 1; }
+
+  /* ── Filters row ── */
+  .filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+  /* ── History tags ── */
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-height: 24px;
+    margin-bottom: 8px;
+  }
+  .tag {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 8px 3px 10px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    animation: fadeIn 0.2s ease;
+  }
+  .tag button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+  }
+  .tag button:hover { color: #ef4444; }
+  .add-row { display: flex; gap: 6px; }
+  .add-row input { flex: 1; }
+
+  /* ── Chat ── */
+  .chat { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .messages::-webkit-scrollbar { width: 3px; }
+  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .msg {
+    border-radius: 10px;
+    padding: 10px 13px;
+    font-size: 13px;
+    line-height: 1.6;
+    animation: fadeIn 0.25s ease;
+  }
+  .msg.user {
+    background: var(--accent);
+    color: white;
+    align-self: flex-end;
+    max-width: 88%;
+    border-bottom-right-radius: 3px;
+  }
+  .msg.ai {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    align-self: flex-start;
+    border-bottom-left-radius: 3px;
+  }
+  .msg.ai strong { color: var(--accent); }
+  .msg.loading { color: var(--muted); background: var(--surface2); border: 1px solid var(--border); }
+
+  .dots span {
+    display: inline-block;
+    width: 5px; height: 5px;
+    background: var(--muted);
+    border-radius: 50%;
+    margin: 0 2px;
+    animation: bounce 1s infinite;
+  }
+  .dots span:nth-child(2) { animation-delay: 0.15s; }
+  .dots span:nth-child(3) { animation-delay: 0.3s; }
+
+  .chat-input {
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 7px;
+  }
+  .chat-input input { flex: 1; }
+
+  /* ── Map ── */
+  #map { width: 100%; height: 100%; }
+  .leaflet-container { background: #0f1117 !important; }
+  .leaflet-popup-content-wrapper {
+    background: var(--surface) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4) !important;
+  }
+  .leaflet-popup-tip { background: var(--surface) !important; }
+  .leaflet-popup-content { font-family: var(--font) !important; font-size: 13px !important; }
+  .leaflet-popup-content b { color: var(--accent) !important; }
+  .leaflet-popup-content small { color: var(--muted) !important; }
+  .leaflet-control-zoom a {
+    background: var(--surface) !important;
+    color: var(--text) !important;
+    border-color: var(--border) !important;
+  }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  @keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-5px); } }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div style="width:26px;height:26px;background:linear-gradient(135deg,#4f8ef7,#7c5cf6);border-radius:7px;"></div>
+  <h1>Twin Cities POI Explorer</h1>
+  <span>Powered by Claude AI + Snowflake</span>
+  <div class="header-right">
+    <span id="poi-count" style="font-size:11px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;">
+      Waiting...
+    </span>
+    <button class="btn ghost" style="font-size:11px;padding:5px 10px;" onclick="locateMe()">
+      My Location
+    </button>
+  </div>
+</header>
+
+<!-- ── Sidebar ── -->
+<aside>
+
+  <!-- Location -->
+  <div class="section">
+    <label>Your Location</label>
+    <div class="loc-row">
+      <input type="number" id="lat" placeholder="Latitude" value="44.9778" step="0.0001">
+      <input type="number" id="lon" placeholder="Longitude" value="-93.2650" step="0.0001">
+      <button class="btn" style="padding:7px 12px;" onclick="loadNearby()">Go</button>
+    </div>
+  </div>
+
+  <!-- Preferences -->
+  <!-- These filters get sent to the backend so Claude
+       can prioritize POIs matching the user's taste -->
+  <div class="section">
+    <label>Preferences</label>
+    <div class="filter-row">
+      <select id="ethnicity">
+        <option value="Any">Any cuisine</option>
+        <option value="Asian">Asian</option>
+        <option value="American">American</option>
+        <option value="Latin American">Latin American</option>
+        <option value="Middle Eastern & African">Middle Eastern & African</option>
+        <option value="European">European</option>
+      </select>
+      <select id="category">
+        <option value="ALL">All categories</option>
+        <option value="Food & Drink">Food & Drink</option>
+        <option value="Shopping">Shopping</option>
+        <option value="Leisure">Leisure</option>
+        <option value="Tourism">Tourism</option>
+        <option value="Health">Health</option>
+        <option value="Education">Education</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Visit History -->
+  <!-- This is the core "conversational AI" feature.
+       The chain of places you visited gets sent to Claude
+       so it can detect your pattern and suggest what's next -->
+  <div class="section">
+    <label>Places I visited today</label>
+    <div class="tags" id="tags">
+      <span style="font-size:11px;color:var(--muted);">No visits yet</span>
+    </div>
+    <div class="add-row">
+      <input type="text" id="tag-input" placeholder="Type a place name..."
+        onkeydown="if(event.key==='Enter') addTag()">
+      <button class="btn ghost" style="padding:7px 10px;" onclick="addTag()">Add</button>
+    </div>
+  </div>
+
+  <!-- Chat -->
+  <!-- This is a live chat with Claude. Each message
+       includes the full visit history and nearby POIs
+       so Claude always has full context -->
+  <div class="chat">
+    <div class="messages" id="messages">
+      <div class="msg ai">
+        Hi! I am your Twin Cities guide. Set your location above or click the map, then ask me anything. Add places you have visited so I can suggest what to explore next!
+      </div>
+    </div>
+    <div class="chat-input">
+      <input type="text" id="chat-in"
+        placeholder="Ask me anything..."
+        onkeydown="if(event.key==='Enter') sendMsg()">
+      <button class="btn" onclick="sendMsg()">Send</button>
+    </div>
+  </div>
+
+</aside>
+
+<!-- ── Map ── -->
+<div id="map"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────
+// These variables hold the current state of the app.
+// visitHistory tracks places in order — this is what
+// Claude uses to detect the user's pattern.
+const API = 'http://localhost:5000/api';
+let map, userMarker, poiMarkers = [], routeLine;
+let visitHistory = [];
+let sessionId = 'session_' + Date.now();
+let currentHighlights = new Set();
+
+// ── Category colors ────────────────────────────────────────
+// Each category gets its own color on the map so the
+// user can instantly see what type of place each pin is.
+const CAT_COLOR = {
+  'Food & Drink':    '#f97316',
+  'Grocery & Food':  '#eab308',
+  'Shopping':        '#a855f7',
+  'Leisure':         '#22c55e',
+  'Health':          '#ec4899',
+  'Education':       '#3b82f6',
+  'Transport':       '#94a3b8',
+  'Tourism':         '#06b6d4',
+  'Finance':         '#10b981',
+  'Entertainment':   '#f43f5e',
+  'Public Services': '#8b5cf6',
+  'Nature':          '#84cc16',
+  'Other':           '#94a3b8',
+};
+
+function catColor(cat) {
+  return CAT_COLOR[cat] || '#94a3b8';
+}
+
+// ── Map setup ──────────────────────────────────────────────
+// We use CartoDB dark tiles — they look great and are free.
+// Clicking the map sets your location and loads nearby POIs.
+function initMap() {
+  map = L.map('map').setView([44.9778, -93.2650], 13);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO',
+    subdomains: 'abcd',
+    maxZoom: 19
+  }).addTo(map);
+
+  map.on('click', e => {
+    document.getElementById('lat').value = e.latlng.lat.toFixed(6);
+    document.getElementById('lon').value = e.latlng.lng.toFixed(6);
+    setUserPin(e.latlng.lat, e.latlng.lng);
+    loadNearby();
+  });
+}
+
+// ── User location pin ──────────────────────────────────────
+function setUserPin(lat, lon) {
+  if (userMarker) map.removeLayer(userMarker);
+  userMarker = L.marker([lat, lon], {
+    icon: L.divIcon({
+      className: '',
+      html: `<div style="width:16px;height:16px;background:#4f8ef7;border:3px solid white;border-radius:50%;box-shadow:0 0 10px #4f8ef780;"></div>`,
+      iconSize: [16,16], iconAnchor: [8,8]
+    })
+  }).addTo(map).bindPopup('<b style="color:#4f8ef7">Your location</b>');
+}
+
+// ── Plot POI pins ──────────────────────────────────────────
+// Each POI gets a colored dot based on category.
+// Highlighted POIs (Claude's recommendations) get a
+// larger glowing dot so they stand out on the map.
+function plotPois(pois, highlightIds = new Set()) {
+  poiMarkers.forEach(m => map.removeLayer(m));
+  poiMarkers = [];
+  window._poiMap = {}; // store markers by name for click lookup
+
+  pois.forEach(poi => {
+    if (!poi.latitude || !poi.longitude) return;
+    const isHL = highlightIds.has(poi.poi_id) || highlightIds.has(poi.name);
+
+    // All pins orange, recommended ones green and bigger
+    const color = isHL ? '#22c55e' : '#f97316';
+    const size  = isHL ? 18 : 9;
+    const glow  = isHL ? `box-shadow:0 0 12px #22c55e;` : '';
+    const border = isHL
+      ? `border:2px solid white;`
+      : `border:1.5px solid rgba(255,255,255,0.2);`;
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:${size}px;height:${size}px;background:${color};${border}${glow}border-radius:50%;"></div>`,
+      iconSize: [size, size],
+      iconAnchor: [size/2, size/2]
+    });
+
+    const popup = `
+      <b style="color:${isHL ? '#22c55e' : '#4f8ef7'}">${poi.name}</b><br>
+      <small>${poi.category || ''}${poi.sub_category_1 ? ' / '+poi.sub_category_1 : ''}</small><br>
+      ${poi.full_address ? `<small>${poi.full_address}</small><br>` : ''}
+      ${poi.phone ? `<small>${poi.phone}</small><br>` : ''}
+      ${poi.hours_category ? `<small>Hours: ${poi.hours_category}</small><br>` : ''}
+      ${poi.distance_km ? `<small>${poi.distance_km}km away</small>` : ''}
+      ${isHL ? '<br><small style="color:#22c55e">Recommended for you</small>' : ''}
+    `;
+
+    const m = L.marker([poi.latitude, poi.longitude], { icon })
+      .addTo(map)
+      .bindPopup(popup);
+
+    poiMarkers.push(m);
+
+    // Store by name for click lookup from chat
+    if (poi.name) {
+      window._poiMap[poi.name.toLowerCase()] = {
+        marker: m,
+        lat: parseFloat(poi.latitude),
+        lon: parseFloat(poi.longitude)
+      };
+    }
+  });
+}
+
+// ── Draw route line ────────────────────────────────────────
+// This draws a connected line between all the places
+// the user has visited today — gives a visual "journey"
+// on the map. We match history names to POI coordinates.
+function drawRoute(pois) {
+  if (routeLine) map.removeLayer(routeLine);
+  if (visitHistory.length < 2) return;
+
+  const coords = visitHistory
+    .map(name => pois.find(p =>
+      p.name && p.name.toLowerCase().includes(name.toLowerCase())
+    ))
+    .filter(Boolean)
+    .map(p => [parseFloat(p.latitude), parseFloat(p.longitude)]);
+
+  if (coords.length >= 2) {
+    routeLine = L.polyline(coords, {
+      color: '#4f8ef7',
+      weight: 2.5,
+      opacity: 0.7,
+      dashArray: '6 4'
+    }).addTo(map);
+  }
+}
+
+// ── Load nearby POIs ───────────────────────────────────────
+async function loadNearby() {
+  const lat = parseFloat(document.getElementById('lat').value);
+  const lon = parseFloat(document.getElementById('lon').value);
+  if (isNaN(lat) || isNaN(lon)) return;
+
+  setUserPin(lat, lon);
+  map.setView([lat, lon], 14);
+
+  try {
+    const res = await fetch(`${API}/nearby`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lon })
+    });
+    const data = await res.json();
+    if (data.pois) {
+      plotPois(data.pois, currentHighlights);;
+      drawRoute(data.pois);
+      document.getElementById('poi-count').textContent =
+        `${data.count} POIs nearby`;
+    }
+  } catch(e) {
+    document.getElementById('poi-count').textContent = 'Backend offline';
+  }
+}
+
+// ── Visit history tags ─────────────────────────────────────
+function addTag() {
+  const input = document.getElementById('tag-input');
+  const val = input.value.trim();
+  if (!val) return;
+  visitHistory.push(val);
+  input.value = '';
+  renderTags();
+
+  // Redraw the route after adding a new place
+  const lat = parseFloat(document.getElementById('lat').value);
+  const lon = parseFloat(document.getElementById('lon').value);
+  if (!isNaN(lat)) loadNearby();
+}
+
+function removeTag(i) {
+  visitHistory.splice(i, 1);
+  renderTags();
+}
+
+function renderTags() {
+  const el = document.getElementById('tags');
+  if (!visitHistory.length) {
+    el.innerHTML = '<span style="font-size:11px;color:var(--muted);">No visits yet</span>';
+    return;
+  }
+  el.innerHTML = visitHistory.map((h, i) => `
+    <span class="tag">
+      ${h}
+      <button onclick="removeTag(${i})">×</button>
+    </span>
+  `).join('');
+}
+
+// ── Chat ───────────────────────────────────────────────────
+function addMsg(role, html) {
+  const el = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  return div;
+}
+
+async function sendMsg() {
+  const input = document.getElementById('chat-in');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  const lat = parseFloat(document.getElementById('lat').value);
+  const lon = parseFloat(document.getElementById('lon').value);
+  const ethnicity = document.getElementById('ethnicity').value;
+  const category = document.getElementById('category').value;
+
+  addMsg('user', msg);
+  const loading = addMsg('loading',
+    '<div class="dots"><span></span><span></span><span></span></div>');
+
+  try {
+    const res = await fetch(API + '/recommend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lat, lon,
+        message: msg,
+        history: visitHistory,
+        session_id: sessionId,
+        ethnicity,
+        category
+      })
+    });
+    const data = await res.json();
+    loading.remove();
+
+    if (data.error) {
+      addMsg('ai', 'Sorry, there was an error: ' + data.error);
+      return;
+    }
+
+    // Format response and make place names clickable
+    let reply = data.reply;
+    reply = reply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    reply = reply.replace(
+      /(\d+)\.\s+<strong>(.*?)<\/strong>/g,
+      function(match, num, name) {
+        return num + '. <strong><span style="color:#4f8ef7;cursor:pointer;text-decoration:underline" onclick="highlightPoi(\'' + name.replace(/'/g, '') + '\')">' + name + '</span></strong>';
+      }
+    );
+
+    addMsg('ai', reply);
+
+    // Extract recommended place names from Claude's raw reply
+    const rawReply = data.reply;
+    const matches = [...rawReply.matchAll(/\d+\.\s+\*\*(.*?)\*\*/g)];
+    const hlNames = matches.slice(0, 20).map(m => m[1].trim());
+    console.log('Highlighted places:', hlNames);
+    const hlIds = new Set(hlNames);
+
+    // Highlight recommended POIs green on map
+    if (data.pois && data.pois.length > 0) {
+      loadAllPoisWithHighlight(hlIds);
+      drawRoute(data.pois);
+      document.getElementById('poi-count').textContent =
+        data.pois.length + ' POIs nearby';
+    }
+
+  } catch(e) {
+    loading.remove();
+    addMsg('ai', 'Could not reach the backend. Make sure app.py is running on port 5000.');
+  }
+}
+
+// Load ALL POIs from all cities for full map display
+async function loadAllPois() {
+  try {
+    document.getElementById('poi-count').textContent = 'Loading all POIs...';
+    const res = await fetch(API + '/all_pois');
+    const data = await res.json();
+    if (data.pois) {
+      plotPois(data.pois);
+      document.getElementById('poi-count').textContent =
+        data.count + ' POIs loaded';
+    }
+  } catch(e) {
+    console.error('Could not load all POIs:', e);
+  }
+}
+
+async function loadAllPoisWithHighlight(hlIds) {
+  try {
+    currentHighlights = hlIds; // remember for redraw
+    const res = await fetch(API + '/all_pois');
+    const data = await res.json();
+    if (data.pois) {
+      const matchedIds = new Set();
+      data.pois.forEach(poi => {
+        if (!poi.name) return;
+        hlIds.forEach(hlName => {
+          if (poi.name.toLowerCase().includes(hlName.toLowerCase()) ||
+              hlName.toLowerCase().includes(poi.name.toLowerCase())) {
+            matchedIds.add(poi.name);
+          }
+        });
+      });
+      console.log('Matched POIs for green:', [...matchedIds]);
+      plotPois(data.pois, matchedIds);
+    }
+  } catch(e) {
+    console.error('Could not reload POIs:', e);
+  }
+}
+
+// ── GPS location ───────────────────────────────────────────
+function locateMe() {
+  if (!navigator.geolocation) {
+    alert('Your browser does not support geolocation.');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      document.getElementById('lat').value = pos.coords.latitude.toFixed(6);
+      document.getElementById('lon').value = pos.coords.longitude.toFixed(6);
+      loadNearby();
+    },
+    () => alert('Could not get your location. Try typing it manually.')
+  );
+}
+
+// ── Start ──────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  initMap();
+  loadNearby(); // Load POIs for default location on startup
+});
+
+
+
+// When user clicks a place name in the chat,
+// fly to it on the map and open its popup
+function highlightPoi(name) {
+  const key = name.toLowerCase();
+  const entry = window._poiMap && window._poiMap[key];
+
+  if (entry) {
+    map.flyTo([entry.lat, entry.lon], 16, { duration: 1.2 });
+    setTimeout(() => entry.marker.openPopup(), 1300);
+  } else {
+    // Try partial match if exact name not found
+    const keys = Object.keys(window._poiMap || {});
+    const partial = keys.find(k => k.includes(key) || key.includes(k));
+    if (partial) {
+      const e = window._poiMap[partial];
+      map.flyTo([e.lat, e.lon], 16, { duration: 1.2 });
+      setTimeout(() => e.marker.openPopup(), 1300);
+    }
+  }
+}
+
+
+</script>
+
+</body>
+</html>
