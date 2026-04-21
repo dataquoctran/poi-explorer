@@ -591,7 +591,19 @@ async function sendMsg() {
 
     // Highlight recommended POIs green on map
     if (data.pois && data.pois.length > 0) {
-      loadAllPoisWithHighlight(hlIds);
+      const matchedIds = new Set();
+      data.pois.forEach(poi => {
+        if (!poi.name) return;
+        hlIds.forEach(hlName => {
+          if (poi.name.toLowerCase().includes(hlName.toLowerCase()) ||
+              hlName.toLowerCase().includes(poi.name.toLowerCase())) {
+            matchedIds.add(poi.name);
+          }
+        });
+      });
+      console.log('Matched POIs for green:', [...matchedIds]);
+      currentHighlights = matchedIds;
+      plotPois(data.pois, matchedIds);
       drawRoute(data.pois);
       document.getElementById('poi-count').textContent =
         data.pois.length + ' POIs nearby';
