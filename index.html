@@ -218,6 +218,31 @@
     border-color: var(--border) !important;
   }
 
+/* Loading overlay */
+  .loading-overlay {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15,17,23,0.75);
+    z-index: 1000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+  }
+  .loading-overlay.visible { display: flex; }
+  .loading-spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .loading-text { font-size: 13px; color: var(--text); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* Map container needs position relative for overlay */
+  #map-container { position: relative; }
+
   @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
   @keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-5px); } }
 </style>
@@ -242,14 +267,28 @@
 <!-- ── Sidebar ── -->
 <aside>
 
-  <!-- Location -->
+<!-- Location -->
   <div class="section">
     <label>Your Location</label>
-    <div class="loc-row">
-      <input type="number" id="lat" placeholder="Latitude" value="44.9778" step="0.0001">
-      <input type="number" id="lon" placeholder="Longitude" value="-93.2650" step="0.0001">
-      <button class="btn" style="padding:7px 12px;" onclick="loadNearby()">Go</button>
+    <div style="font-size:13px;color:var(--text);margin-bottom:8px;min-height:20px;" id="location-name">
+      Click the map or use GPS to set location
     </div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn ghost" style="flex:1;font-size:11px;padding:7px 8px;" onclick="locateMe()">
+        Use GPS
+      </button>
+      <button class="btn" style="flex:1;font-size:11px;padding:7px 8px;" id="update-btn" onclick="confirmLocation()" disabled>
+        Update My Location
+      </button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;">
+      Or click anywhere on the map to pick a spot
+    </div>
+    <!-- Hidden inputs to store coordinates -->
+    <input type="hidden" id="lat" value="44.9778">
+    <input type="hidden" id="lon" value="-93.2650">
+    <input type="hidden" id="pending-lat" value="">
+    <input type="hidden" id="pending-lon" value="">
   </div>
 
   <!-- Preferences -->
@@ -315,7 +354,13 @@
 </aside>
 
 <!-- ── Map ── -->
-<div id="map"></div>
+<div id="map-container" style="position:relative;overflow:hidden;">
+  <div id="map"></div>
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loading-text">Loading POIs...</div>
+  </div>
+</div>
 
 <script>
 // ── State ─────────────────────────────────────────────────
@@ -351,26 +396,92 @@ function catColor(cat) {
   return CAT_COLOR[cat] || '#94a3b8';
 }
 
+function showLoading(msg = 'Loading...') {
+  document.getElementById('loading-text').textContent = msg;
+  document.getElementById('loading-overlay').classList.add('visible');
+}
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.remove('visible');
+}
+
 // ── Map setup ──────────────────────────────────────────────
 // We use CartoDB dark tiles — they look great and are free.
 // Clicking the map sets your location and loads nearby POIs.
 function initMap() {
-  map = L.map('map').setView([44.9778, -93.2650], 13);
+  map = L.map('map-container').setView([44.9778, -93.2650], 13);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '© OpenStreetMap © CARTO',
     subdomains: 'abcd',
     maxZoom: 19
   }).addTo(map);
 
+  // Clicking map sets a PENDING location shown as a gray pin
+  // User must click "Update My Location" to confirm
   map.on('click', e => {
-    document.getElementById('lat').value = e.latlng.lat.toFixed(6);
-    document.getElementById('lon').value = e.latlng.lng.toFixed(6);
-    setUserPin(e.latlng.lat, e.latlng.lng);
-    loadNearby();
+    setPendingPin(e.latlng.lat, e.latlng.lng);
   });
 }
 
 // ── User location pin ──────────────────────────────────────
+// ── Pending location pin ───────────────────────────────────
+// When user clicks the map we show a gray pin and city name
+// but don't load POIs yet — they must click "Update My Location"
+let pendingMarker = null;
+
+function setPendingPin(lat, lon) {
+  // Remove old pending pin
+  if (pendingMarker) map.removeLayer(pendingMarker);
+
+  // Show gray pending pin
+  pendingMarker = L.marker([lat, lon], {
+    icon: L.divIcon({
+      className: '',
+      html: '<div style="width:14px;height:14px;background:#888780;border:2px solid white;border-radius:50%;"></div>',
+      iconSize: [14,14], iconAnchor: [7,7]
+    })
+  }).addTo(map).bindPopup('Click "Update My Location" to confirm').openPopup();
+
+  // Store pending coordinates
+  document.getElementById('pending-lat').value = lat.toFixed(6);
+  document.getElementById('pending-lon').value = lon.toFixed(6);
+
+  // Show city name using reverse geocoding (free Nominatim API)
+  document.getElementById('location-name').textContent = 'Getting location name...';
+  fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
+    .then(r => r.json())
+    .then(d => {
+      const city = d.address.city || d.address.town || d.address.suburb || d.address.county || 'Unknown area';
+      const state = d.address.state || '';
+      document.getElementById('location-name').textContent = city + (state ? ', ' + state : '');
+    })
+    .catch(() => {
+      document.getElementById('location-name').textContent = `${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}`;
+    });
+
+  // Enable the Update button
+  document.getElementById('update-btn').disabled = false;
+  document.getElementById('update-btn').style.opacity = '1';
+}
+
+function confirmLocation() {
+  const lat = parseFloat(document.getElementById('pending-lat').value);
+  const lon = parseFloat(document.getElementById('pending-lon').value);
+  if (isNaN(lat) || isNaN(lon)) return;
+
+  // Move confirmed coordinates to main inputs
+  document.getElementById('lat').value = lat;
+  document.getElementById('lon').value = lon;
+
+  // Remove pending pin
+  if (pendingMarker) { map.removeLayer(pendingMarker); pendingMarker = null; }
+
+  // Disable button until next selection
+  document.getElementById('update-btn').disabled = true;
+
+  // Load POIs for new location
+  loadNearby();
+}
+
 function setUserPin(lat, lon) {
   if (userMarker) map.removeLayer(userMarker);
   userMarker = L.marker([lat, lon], {
@@ -471,6 +582,9 @@ async function loadNearby() {
   setUserPin(lat, lon);
   map.setView([lat, lon], 14);
 
+  // Show loading overlay
+  showLoading('Loading POIs from Snowflake...');
+
   try {
     const res = await fetch(`${API}/nearby`, {
       method: 'POST',
@@ -479,13 +593,15 @@ async function loadNearby() {
     });
     const data = await res.json();
     if (data.pois) {
-      plotPois(data.pois, currentHighlights);;
+      plotPois(data.pois, currentHighlights);
       drawRoute(data.pois);
       document.getElementById('poi-count').textContent =
         `${data.count} POIs nearby`;
     }
   } catch(e) {
     document.getElementById('poi-count').textContent = 'Backend offline';
+  } finally {
+    hideLoading();
   }
 }
 
@@ -548,6 +664,7 @@ async function sendMsg() {
   addMsg('user', msg);
   const loading = addMsg('loading',
     '<div class="dots"><span></span><span></span><span></span></div>');
+  showLoading('Claude is thinking...');
 
   try {
     const res = await fetch(API + '/recommend', {
@@ -564,6 +681,7 @@ async function sendMsg() {
     });
     const data = await res.json();
     loading.remove();
+    hideLoading();
 
     if (data.error) {
       addMsg('ai', 'Sorry, there was an error: ' + data.error);
@@ -611,6 +729,7 @@ async function sendMsg() {
 
   } catch(e) {
     loading.remove();
+    hideLoading();
     addMsg('ai', 'Could not reach the backend. Make sure app.py is running on port 5000.');
   }
 }
@@ -618,7 +737,7 @@ async function sendMsg() {
 // Load ALL POIs from all cities for full map display
 async function loadAllPois() {
   try {
-    document.getElementById('poi-count').textContent = 'Loading all POIs...';
+    showLoading('Loading all POIs...');
     const res = await fetch(API + '/all_pois');
     const data = await res.json();
     if (data.pois) {
