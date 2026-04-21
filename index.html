@@ -583,7 +583,7 @@ async function loadNearby() {
   map.setView([lat, lon], 14);
 
   // Show loading overlay
-  showLoading('Loading POIs from Snowflake...');
+  showLoading('Finding POIs near your location...');
 
   try {
     const res = await fetch(`${API}/nearby`, {
@@ -664,7 +664,7 @@ async function sendMsg() {
   addMsg('user', msg);
   const loading = addMsg('loading',
     '<div class="dots"><span></span><span></span><span></span></div>');
-  showLoading('Claude is thinking...');
+  showLoading('Let me give you some recommendations...');
 
   try {
     const res = await fetch(API + '/recommend', {
