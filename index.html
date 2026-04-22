@@ -301,6 +301,12 @@
         Hi! I am your Twin Cities guide. Set your location above or click the map, then ask me anything. Add places you have visited so I can suggest what to explore next!
       </div>
     </div>
+    <div style="padding:8px 14px 0 14px;display:flex;gap:6px;">
+      <button class="btn ghost" id="mode-btn" onclick="toggleMode()"
+        style="flex:1;font-size:11px;padding:7px 8px;border:1px solid var(--accent);color:var(--accent);">
+        🔍 Search Recommendations
+      </button>
+    </div>
     <div class="chat-input">
       <input type="text" id="chat-in"
         placeholder="Ask me anything..."
@@ -329,6 +335,7 @@ const API = 'http://localhost:5000/api';
 let map, userMarker, poiMarkers = [], routeLine;
 let visitHistory = [];
 let sessionId = 'session_' + Date.now();
+let searchMode = false; // false = Q&A mode, true = recommendation search mode
 let currentHighlights = new Set();
 
 // ── Category colors ────────────────────────────────────────
@@ -675,7 +682,7 @@ async function sendMsg() {
   addMsg('user', msg);
   const loading = addMsg('loading',
     '<div class="dots"><span></span><span></span><span></span></div>');
-  showLoading('Let me give you some recommendations...');
+  showLoading(searchMode ? 'Let me give you some recommendations...' : 'Thinking...');
 
   try {
     const res = await fetch(API + '/recommend', {
@@ -687,7 +694,8 @@ async function sendMsg() {
         history: visitHistory,
         session_id: sessionId,
         ethnicity,
-        category
+        category,
+        search_mode: searchMode
       })
     });
     const data = await res.json();
@@ -713,54 +721,41 @@ async function sendMsg() {
     addMsg('ai', rawReply);
 
     // Highlight recommended POIs green on map
-    if (data.pois && data.pois.length > 0) {
-    // Build ordered array matching hlNames order for correct pin numbering
-    // Match by name AND distance to find the exact POI Claude mentioned
-      // Extract distances from raw reply e.g. "Caribou Coffee (0.3km away)"
+    // Only update map pins if in search/recommendation mode
+    if (searchMode && data.pois && data.pois.length > 0) {
       const matchedIds = new Set();
-      const matchedPois = new Map(); // name -> poi object for unique tracking
+      const matchedPois = new Map();
 
       hlNames.forEach(hlName => {
         if (!hlName) return;
         const hlLower = hlName.toLowerCase().trim();
-
-        // Extract the distance Claude mentioned for this place
         const distRegex = new RegExp(
           hlName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
           '\\s*\\(([\\d.]+)km away\\)', 'i'
         );
         const distMatch = rawReply.match(distRegex);
         const mentionedDist = distMatch ? parseFloat(distMatch[1]) : null;
-
-        // Find candidates by name
         const candidates = data.pois.filter(p => p.name &&
           p.name.toLowerCase().trim().replace(/[^a-z0-9 ]/g, '') ===
           hlLower.replace(/[^a-z0-9 ]/g, '')
         );
-
         let best = null;
         if (candidates.length === 1) {
-          // Only one match — easy
           best = candidates[0];
         } else if (candidates.length > 1 && mentionedDist !== null) {
-          // Multiple matches — pick the one closest to Claude's stated distance
           best = candidates.reduce((prev, curr) =>
-          Math.abs((curr.distance_km || 999) - mentionedDist) < Math.abs((prev.distance_km || 999) - mentionedDist) ? curr : prev
+            Math.abs((curr.distance_km || 999) - mentionedDist) < Math.abs((prev.distance_km || 999) - mentionedDist) ? curr : prev
           );
         } else if (candidates.length > 1) {
-          // No distance info — pick the nearest one
           best = candidates.reduce((prev, curr) =>
             (curr.distance_km || 999) < (prev.distance_km || 999) ? curr : prev
           );
         }
-
         if (best && !matchedPois.has(hlName)) {
           matchedPois.set(hlName, best);
-          matchedIds.add(best.name + '|' + best.distance_km);
         }
       });
 
-      // Rebuild matchedIds as unique poi identifiers
       const finalMatchedIds = new Set();
       matchedPois.forEach((poi) => {
         finalMatchedIds.add(poi.name + '|' + poi.distance_km);
@@ -771,6 +766,10 @@ async function sendMsg() {
       drawRoute(data.pois);
       document.getElementById('poi-count').textContent =
         data.pois.length + ' POIs nearby';
+
+      // Auto switch back to Q&A mode after recommendations load
+      searchMode = false;
+      toggleMode();
     }
 
   } catch(e) {
@@ -865,6 +864,23 @@ function highlightPoi(name) {
   }
 }
 
+// Add a button to toggle between Q&A mode and recommendation search mode
+function toggleMode() {
+  searchMode = !searchMode;
+  const btn = document.getElementById('mode-btn');
+  const input = document.getElementById('chat-in');
+  if (searchMode) {
+    btn.style.background = 'var(--accent)';
+    btn.style.color = 'white';
+    btn.textContent = '✓ Recommendation mode — click to switch to Q&A';
+    input.placeholder = 'What are you looking for? (e.g. best coffee near me)';
+  } else {
+    btn.style.background = 'transparent';
+    btn.style.color = 'var(--accent)';
+    btn.textContent = '🔍 Search Recommendations';
+    input.placeholder = 'Ask me anything...';
+  }
+}
 
 </script>
 
