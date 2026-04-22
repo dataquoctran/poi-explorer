@@ -162,6 +162,7 @@ def recommend():
     session_id = data.get("session_id", "default")
     ethnicity  = data.get("ethnicity", "Any")
     category   = data.get("category", "ALL")
+    search_mode = data.get("search_mode", False)
 
     # Save visit history to session
     sessions[session_id] = history
@@ -216,7 +217,8 @@ def recommend():
     # This tells Claude who it is and how to behave.
     # A good system prompt is the difference between
     # a generic answer and a genuinely useful one.
-    system_prompt = """You are a friendly local guide for the Twin Cities metro area.
+    if search_mode:
+        system_prompt = """You are a friendly local guide for the Twin Cities metro area.
 
 For each recommendation use EXACTLY this format with a blank line between each:
 
@@ -225,12 +227,6 @@ About: one sentence description of what makes this place worth visiting
 Hours: [hours from data, or "Not available"]
 Website: [website from data, or "Not available"]
 Category: [category and ethnicity if applicable]
-
-**2. Place Name** (X.Xkm away)
-About: one sentence description
-Hours: [hours]
-Website: [website]
-Category: [category]
 
 Continue up to 20 places if enough POIs exist.
 After the last place, add:
@@ -242,8 +238,17 @@ Rules:
 - Include real distance, hours, and website from the data
 - If website is not available write Not available
 - Do NOT add any intro text before the first recommendation"""
+    else:
+        system_prompt = """You are a friendly conversational assistant. 
+Answer the user's message naturally and briefly.
+If they say hi or greet you, just greet back in 1 sentence.
+If they ask a specific question about a place or area, answer it concisely.
+Do NOT list recommendations unless specifically asked.
+Do NOT use bullet points or emojis unless the conversation calls for it.
+Keep all responses under 3 sentences unless the user asks a detailed question."""
 
-    user_prompt = f"""User location: {lat}, {lon}
+    if search_mode:
+        user_prompt = f"""User location: {lat}, {lon}
 {history_text}
 {ethnicity_text}
 
@@ -253,6 +258,12 @@ Nearby POIs:
 User says: "{message}"
 
 Give your top recommendations from the list above."""
+    else:
+        user_prompt = f"""User location: {lat}, {lon}
+
+User says: "{message}"
+
+Respond naturally and briefly. Only reference nearby places if directly relevant."""
 
     # Call Claude API
     client = anthropic.Anthropic()
