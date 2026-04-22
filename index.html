@@ -644,7 +644,49 @@ function addMsg(role, html) {
   const el = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = 'msg ' + role;
-  div.innerHTML = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+  if (role === 'ai') {
+    // Format bold
+    let formatted = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Make numbered headings stand out
+    formatted = formatted.replace(
+      /(<strong>)(\d+\.\s.*?)(<\/strong>)/g,
+      '<strong style="font-size:14px;color:var(--accent)">$2</strong>'
+    );
+
+    // Make place names in headings clickable
+    formatted = formatted.replace(
+      /<strong style="font-size:14px;color:var\(--accent\)">(\d+\.\s+)(.*?)(\s*\(.*?\))<\/strong>/g,
+      function(match, num, name, dist) {
+        const safeName = name.trim().replace(/'/g, '');
+        return '<strong style="font-size:14px;color:var(--accent)">' + num +
+          '<span style="cursor:pointer;text-decoration:underline" onclick="highlightPoi(\'' + safeName + '\')">' +
+          name + '</span>' + dist + '</strong>';
+      }
+    );
+
+    // Style each field label
+    formatted = formatted.replace(/About:/g, '<br><strong style="color:var(--text);font-size:12px">About:</strong>');
+    formatted = formatted.replace(/Hours:/g, '<strong style="color:var(--text);font-size:12px">Hours:</strong>');
+    formatted = formatted.replace(/Website:/g, '<strong style="color:var(--text);font-size:12px">Website:</strong>');
+    formatted = formatted.replace(/Category:/g, '<strong style="color:var(--text);font-size:12px">Category:</strong>'); 
+
+    // Make website URLs clickable
+    formatted = formatted.replace(
+      /(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" target="_blank" style="color:var(--accent);word-break:break-all">$1</a>'
+    );
+
+    // Add spacing between recommendation blocks
+    formatted = formatted.replace(/\n\n/g, '</p><p style="margin-top:10px">');
+    formatted = formatted.replace(/\n/g, '<br>');
+
+    div.innerHTML = '<p>' + formatted + '</p>';
+  } else {
+    div.innerHTML = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  }
+
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
   return div;
@@ -688,24 +730,18 @@ async function sendMsg() {
       return;
     }
 
-    // Format response and make place names clickable
-    let reply = data.reply;
-    reply = reply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    reply = reply.replace(
-      /(\d+)\.\s+<strong>(.*?)<\/strong>/g,
-      function(match, num, name) {
-        return num + '. <strong><span style="color:#4f8ef7;cursor:pointer;text-decoration:underline" onclick="highlightPoi(\'' + name.replace(/'/g, '') + '\')">' + name + '</span></strong>';
-      }
-    );
-
-    addMsg('ai', reply);
-
-    // Extract recommended place names from Claude's raw reply
+// Extract place names FIRST before any formatting
     const rawReply = data.reply;
-    const matches = [...rawReply.matchAll(/\d+\.\s+\*\*(.*?)\*\*/g)];
-    const hlNames = matches.slice(0, 20).map(m => m[1].trim());
+    const matches = [...rawReply.matchAll(/\*\*\d+\.\s+(.*?)\*\*|^\d+\.\s+\*\*(.*?)\*\*/gm)];
+    const hlNames = matches
+      .map(m => (m[1] || m[2] || '').replace(/\s*\(.*?\)\s*$/, '').trim())
+      .filter(Boolean)
+      .slice(0, 20);
     console.log('Highlighted places:', hlNames);
     const hlIds = new Set(hlNames);
+
+    // Now display the message — addMsg handles all formatting
+    addMsg('ai', rawReply);
 
     // Highlight recommended POIs green on map
     if (data.pois && data.pois.length > 0) {
@@ -713,8 +749,10 @@ async function sendMsg() {
       data.pois.forEach(poi => {
         if (!poi.name) return;
         hlIds.forEach(hlName => {
-          if (poi.name.toLowerCase().includes(hlName.toLowerCase()) ||
-              hlName.toLowerCase().includes(poi.name.toLowerCase())) {
+          if (hlName && (
+            poi.name.toLowerCase().includes(hlName.toLowerCase()) ||
+            hlName.toLowerCase().includes(poi.name.toLowerCase())
+          )) {
             matchedIds.add(poi.name);
           }
         });
