@@ -121,7 +121,7 @@ def haversine(lat1, lon1, lat2, lon2):
 # Takes the full list from Snowflake and keeps only
 # those within radius_km of the user's current location.
 # Sorted nearest-first so Claude sees the closest ones.
-def get_nearby(pois, lat, lon, radius_km=100, limit=500):
+def get_nearby(pois, lat, lon, radius_km=100, limit=1000):
     # Now we have real lat/lon so we can calculate actual distance
     # radius_km=10 gives a good coverage area around the user
     results = []
@@ -283,7 +283,7 @@ def nearby():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    close = get_nearby(all_pois, lat, lon, radius_km=100)
+    close = get_nearby(all_pois, lat, lon, radius_km=30)
     return jsonify({"pois": close, "count": len(close)})
 
 # ── API Route: /api/health ─────────────────────────────────
