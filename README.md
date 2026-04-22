@@ -165,4 +165,3 @@ MIT License. See `LICENSE` for details.
 
 ---
 
-*Built with ☕ in the Twin Cities.*
