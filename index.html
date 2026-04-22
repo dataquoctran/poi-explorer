@@ -27,7 +27,7 @@
     height: 100vh;
     display: grid;
     grid-template-rows: 54px 1fr;
-    grid-template-columns: 360px 1fr;
+    grid-template-columns: 460px 1fr;
     overflow: hidden;
   }
 
@@ -502,23 +502,18 @@ function plotPois(pois, highlightIds = new Set()) {
   poiMarkers = [];
   window._poiMap = {};
 
-  // Build ordered list of highlighted names for numbering
-  const hlList = [...highlightIds];
+  // Build ordered list for numbering — preserves insertion order
+  const hlList = [];
+  highlightIds.forEach(n => hlList.push(n));
 
   pois.forEach(poi => {
     if (!poi.latitude || !poi.longitude) return;
 
-    // Check if this POI is highlighted and get its number
+    // Match using name|distance key
+    const poiKey = poi.name + '|' + poi.distance_km;
     let hlIndex = -1;
-    if (highlightIds.size > 0) {
-      hlList.forEach((hlName, i) => {
-        if (poi.name && (
-          poi.name.toLowerCase().includes(hlName.toLowerCase()) ||
-          hlName.toLowerCase().includes(poi.name.toLowerCase())
-        )) {
-          hlIndex = i + 1; // 1-based number
-        }
-      });
+    if (highlightIds.has(poiKey)) {
+      hlIndex = hlList.indexOf(poiKey) + 1;
     }
 
     const isHL = hlIndex > 0;
@@ -527,7 +522,6 @@ function plotPois(pois, highlightIds = new Set()) {
     const glow  = isHL ? 'box-shadow:0 0 12px #22c55e;' : '';
     const border = isHL ? 'border:2px solid white;' : 'border:1.5px solid rgba(255,255,255,0.2);';
 
-    // Numbered pin for recommendations, dot for others
     const pinHtml = isHL
       ? `<div style="width:${size}px;height:${size}px;background:${color};${border}${glow}border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:white;font-family:sans-serif;">${hlIndex}</div>`
       : `<div style="width:${size}px;height:${size}px;background:${color};${border}border-radius:50%;"></div>`;
@@ -597,7 +591,7 @@ async function loadNearby() {
   if (isNaN(lat) || isNaN(lon)) return;
 
   setUserPin(lat, lon);
-  map.setView([lat, lon], 14);
+  map.setView([lat, lon], 15);
 
   // Show loading overlay
   showLoading('Finding POIs near your location...');
@@ -685,10 +679,10 @@ function addMsg(role, html) {
     );
 
     // Style each field label
-    formatted = formatted.replace(/About:/g, '<br><span style="color:#7c5cf6;font-size:11px;font-weight:500;letter-spacing:0.05em">About:</span>');
-    formatted = formatted.replace(/Hours:/g, '<span style="color:#7c5cf6;font-size:11px;font-weight:500;letter-spacing:0.05em">Hours:</span>');
-    formatted = formatted.replace(/Website:/g, '<span style="color:#7c5cf6;font-size:11px;font-weight:500;letter-spacing:0.05em">Website:</span>');
-    formatted = formatted.replace(/Category:/g, '<span style="color:#7c5cf6;font-size:11px;font-weight:500;letter-spacing:0.05em">Category:</span>');
+    formatted = formatted.replace(/About:/g, '<br><span style="color:#8ab4f8;font-size:11px;font-weight:500;letter-spacing:0.05em">About:</span>');
+    formatted = formatted.replace(/Hours:/g, '<span style="color:#8ab4f8;font-size:11px;font-weight:500;letter-spacing:0.05em">Hours:</span>');
+    formatted = formatted.replace(/Website:/g, '<span style="color:#8ab4f8;font-size:11px;font-weight:500;letter-spacing:0.05em">Website:</span>');
+    formatted = formatted.replace(/Category:/g, '<span style="color:#8ab4f8;font-size:11px;font-weight:500;letter-spacing:0.05em">Category:</span>');
 
     // Make website URLs clickable
     formatted = formatted.replace(
@@ -762,21 +756,60 @@ async function sendMsg() {
 
     // Highlight recommended POIs green on map
     if (data.pois && data.pois.length > 0) {
+    // Build ordered array matching hlNames order for correct pin numbering
+    // Match by name AND distance to find the exact POI Claude mentioned
+      // Extract distances from raw reply e.g. "Caribou Coffee (0.3km away)"
       const matchedIds = new Set();
-      data.pois.forEach(poi => {
-        if (!poi.name) return;
-        hlIds.forEach(hlName => {
-          if (hlName && (
-            poi.name.toLowerCase().includes(hlName.toLowerCase()) ||
-            hlName.toLowerCase().includes(poi.name.toLowerCase())
-          )) {
-            matchedIds.add(poi.name);
-          }
-        });
+      const matchedPois = new Map(); // name -> poi object for unique tracking
+
+      hlNames.forEach(hlName => {
+        if (!hlName) return;
+        const hlLower = hlName.toLowerCase().trim();
+
+        // Extract the distance Claude mentioned for this place
+        const distRegex = new RegExp(
+          hlName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
+          '\\s*\\(([\\d.]+)km away\\)', 'i'
+        );
+        const distMatch = rawReply.match(distRegex);
+        const mentionedDist = distMatch ? parseFloat(distMatch[1]) : null;
+
+        // Find candidates by name
+        const candidates = data.pois.filter(p => p.name &&
+          p.name.toLowerCase().trim().replace(/[^a-z0-9 ]/g, '') ===
+          hlLower.replace(/[^a-z0-9 ]/g, '')
+        );
+
+        let best = null;
+        if (candidates.length === 1) {
+          // Only one match — easy
+          best = candidates[0];
+        } else if (candidates.length > 1 && mentionedDist !== null) {
+          // Multiple matches — pick the one closest to Claude's stated distance
+          best = candidates.reduce((prev, curr) =>
+          Math.abs((curr.distance_km || 999) - mentionedDist) < Math.abs((prev.distance_km || 999) - mentionedDist) ? curr : prev
+          );
+        } else if (candidates.length > 1) {
+          // No distance info — pick the nearest one
+          best = candidates.reduce((prev, curr) =>
+            (curr.distance_km || 999) < (prev.distance_km || 999) ? curr : prev
+          );
+        }
+
+        if (best && !matchedPois.has(hlName)) {
+          matchedPois.set(hlName, best);
+          matchedIds.add(best.name + '|' + best.distance_km);
+        }
       });
-      console.log('Matched POIs for green:', [...matchedIds]);
-      currentHighlights = matchedIds;
-      plotPois(data.pois, matchedIds);
+
+      // Rebuild matchedIds as unique poi identifiers
+      const finalMatchedIds = new Set();
+      matchedPois.forEach((poi) => {
+        finalMatchedIds.add(poi.name + '|' + poi.distance_km);
+      });
+      console.log('Matched POIs for green:', [...finalMatchedIds]);
+      currentHighlights = finalMatchedIds;
+      plotPois(data.pois, finalMatchedIds);
       drawRoute(data.pois);
       document.getElementById('poi-count').textContent =
         data.pois.length + ' POIs nearby';
