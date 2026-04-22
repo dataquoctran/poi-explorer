@@ -70,7 +70,7 @@ def get_snowflake_pois(lat=44.9778, lon=-93.2650, category="ALL"):
             SELECT 
                 POI_ID, NAME, CATEGORY, SUB_CATEGORY_1, SUB_CATEGORY_2,
                 ETHNICITY_REFERENCE, BUSINESS_TYPE, FULL_ADDRESS,
-                CITY, POSTCODE, PHONE, WEBSITE, HOURS_CATEGORY,
+                CITY, POSTCODE, PHONE, WEBSITE, HOURS_CATEGORY, OPENING_HOURS,
                 IS_LATE_NIGHT, IS_WHEELCHAIR_ACCESSIBLE,
                 DATA_QUALITY_SCORE, CITY_TIER, GEO_QUADRANT,
                 LATITUDE, LONGITUDE
@@ -83,7 +83,7 @@ def get_snowflake_pois(lat=44.9778, lon=-93.2650, category="ALL"):
             SELECT 
                 POI_ID, NAME, CATEGORY, SUB_CATEGORY_1, SUB_CATEGORY_2,
                 ETHNICITY_REFERENCE, BUSINESS_TYPE, FULL_ADDRESS,
-                CITY, POSTCODE, PHONE, WEBSITE, HOURS_CATEGORY,
+                CITY, POSTCODE, PHONE, WEBSITE, HOURS_CATEGORY, OPENING_HOURS,
                 IS_LATE_NIGHT, IS_WHEELCHAIR_ACCESSIBLE,
                 DATA_QUALITY_SCORE, CITY_TIER, GEO_QUADRANT,
                 LATITUDE, LONGITUDE
@@ -184,12 +184,13 @@ def recommend():
     # Build POI context for Claude
     # We give Claude structured info so it can reason well
     poi_lines = "\n".join([
-        f"- {p['name']} | {p['category']}"
-        f"{' / ' + p['sub_category_1'] if p.get('sub_category_1') else ''}"
-        f"{' / ' + p['sub_category_2'] if p.get('sub_category_2') else ''}"
-        f"{' | ethnicity: ' + p['ethnicity_reference'] if p.get('ethnicity_reference') else ''}"
+        f"- {p['name']}"
         f" | {p['distance_km']}km away"
-        f"{' | ' + p['city'] if p.get('city') else ''}"
+        f" | category: {p['category']}{' / ' + p['sub_category_1'] if p.get('sub_category_1') else ''}"
+        f"{' | ethnicity: ' + p['ethnicity_reference'] if p.get('ethnicity_reference') else ''}"
+        f"{' | hours: ' + p['opening_hours'] if p.get('opening_hours') else ''}"
+        f"{' | website: ' + p['website'] if p.get('website') else ''}"
+        f"{' | city: ' + p['city'] if p.get('city') else ''}"
         for p in nearby
     ])
 
@@ -217,27 +218,30 @@ def recommend():
     # a generic answer and a genuinely useful one.
     system_prompt = """You are a friendly local guide for the Twin Cities metro area.
 
-STRICT FORMAT — you MUST follow this exactly, no exceptions:
+For each recommendation use EXACTLY this format with a blank line between each:
 
-1. **Place Name** (X.Xkm away) — one sentence reason
-2. **Place Name** (X.Xkm away) — one sentence reason
-3. **Place Name** (X.Xkm away) — one sentence reason
-4. **Place Name** (X.Xkm away) — one sentence reason
-5. **Place Name** (X.Xkm away) — one sentence reason
-6. **Place Name** (X.Xkm away) — one sentence reason
-7. **Place Name** (X.Xkm away) — one sentence reason
-8. **Place Name** (X.Xkm away) — one sentence reason
-9. **Place Name** (X.Xkm away) — one sentence reason
-10. **Place Name** (X.Xkm away) — one sentence reason
+**1. Place Name** (X.Xkm away)
+About: one sentence description of what makes this place worth visiting
+Hours: [hours from data, or "Not available"]
+Website: [website from data, or "Not available"]
+Category: [category and ethnicity if applicable]
 
-Continue up to 20 if enough POIs exist.
+**2. Place Name** (X.Xkm away)
+About: one sentence description
+Hours: [hours]
+Website: [website]
+Category: [category]
+
+Continue up to 20 places if enough POIs exist.
+After the last place, add:
+💡 Local Tip: one fun fact about the area
 
 Rules:
-- Only use place names from the POI list provided
-- Use the EXACT name as it appears in the list
-- Include real distance from the list
-- After the numbered list add one Local Tip line
-- Do NOT add any text before the numbered list"""
+- Only recommend places from the POI list
+- Use EXACT place names from the list
+- Include real distance, hours, and website from the data
+- If website is not available write Not available
+- Do NOT add any intro text before the first recommendation"""
 
     user_prompt = f"""User location: {lat}, {lon}
 {history_text}
@@ -254,7 +258,7 @@ Give your top recommendations from the list above."""
     client = anthropic.Anthropic()
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=800,
+        max_tokens=2000,
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}]
     )
