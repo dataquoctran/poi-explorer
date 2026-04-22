@@ -500,35 +500,53 @@ function setUserPin(lat, lon) {
 function plotPois(pois, highlightIds = new Set()) {
   poiMarkers.forEach(m => map.removeLayer(m));
   poiMarkers = [];
-  window._poiMap = {}; // store markers by name for click lookup
+  window._poiMap = {};
+
+  // Build ordered list of highlighted names for numbering
+  const hlList = [...highlightIds];
 
   pois.forEach(poi => {
     if (!poi.latitude || !poi.longitude) return;
-    const isHL = highlightIds.has(poi.poi_id) || highlightIds.has(poi.name);
 
-    // All pins orange, recommended ones green and bigger
+    // Check if this POI is highlighted and get its number
+    let hlIndex = -1;
+    if (highlightIds.size > 0) {
+      hlList.forEach((hlName, i) => {
+        if (poi.name && (
+          poi.name.toLowerCase().includes(hlName.toLowerCase()) ||
+          hlName.toLowerCase().includes(poi.name.toLowerCase())
+        )) {
+          hlIndex = i + 1; // 1-based number
+        }
+      });
+    }
+
+    const isHL = hlIndex > 0;
     const color = isHL ? '#22c55e' : '#f97316';
-    const size  = isHL ? 18 : 9;
-    const glow  = isHL ? `box-shadow:0 0 12px #22c55e;` : '';
-    const border = isHL
-      ? `border:2px solid white;`
-      : `border:1.5px solid rgba(255,255,255,0.2);`;
+    const size  = isHL ? 22 : 9;
+    const glow  = isHL ? 'box-shadow:0 0 12px #22c55e;' : '';
+    const border = isHL ? 'border:2px solid white;' : 'border:1.5px solid rgba(255,255,255,0.2);';
+
+    // Numbered pin for recommendations, dot for others
+    const pinHtml = isHL
+      ? `<div style="width:${size}px;height:${size}px;background:${color};${border}${glow}border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:white;font-family:sans-serif;">${hlIndex}</div>`
+      : `<div style="width:${size}px;height:${size}px;background:${color};${border}border-radius:50%;"></div>`;
 
     const icon = L.divIcon({
       className: '',
-      html: `<div style="width:${size}px;height:${size}px;background:${color};${border}${glow}border-radius:50%;"></div>`,
+      html: pinHtml,
       iconSize: [size, size],
       iconAnchor: [size/2, size/2]
     });
 
     const popup = `
-      <b style="color:${isHL ? '#22c55e' : '#4f8ef7'}">${poi.name}</b><br>
+      <b style="color:${isHL ? '#22c55e' : '#4f8ef7'}">${isHL ? '#' + hlIndex + ' — ' : ''}${poi.name}</b><br>
       <small>${poi.category || ''}${poi.sub_category_1 ? ' / '+poi.sub_category_1 : ''}</small><br>
       ${poi.full_address ? `<small>${poi.full_address}</small><br>` : ''}
       ${poi.phone ? `<small>${poi.phone}</small><br>` : ''}
       ${poi.hours_category ? `<small>Hours: ${poi.hours_category}</small><br>` : ''}
       ${poi.distance_km ? `<small>${poi.distance_km}km away</small>` : ''}
-      ${isHL ? '<br><small style="color:#22c55e">Recommended for you</small>' : ''}
+      ${isHL ? '<br><small style="color:#22c55e">Recommended #' + hlIndex + '</small>' : ''}
     `;
 
     const m = L.marker([poi.latitude, poi.longitude], { icon })
@@ -537,7 +555,6 @@ function plotPois(pois, highlightIds = new Set()) {
 
     poiMarkers.push(m);
 
-    // Store by name for click lookup from chat
     if (poi.name) {
       window._poiMap[poi.name.toLowerCase()] = {
         marker: m,
@@ -649,28 +666,29 @@ function addMsg(role, html) {
     // Format bold
     let formatted = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
-    // Make numbered headings stand out
+// Make numbered headings clickable — matches **1. Place Name** (X.Xkm away)
+// Make numbered headings clickable
+    // Matches: <strong>17. Gold Medal Park</strong> (0.92km away)
+    // or:      <strong>17. Gold Medal Park (0.92km away)</strong>
     formatted = formatted.replace(
-      /(<strong>)(\d+\.\s.*?)(<\/strong>)/g,
-      '<strong style="font-size:14px;color:var(--accent)">$2</strong>'
-    );
-
-    // Make place names in headings clickable
-    formatted = formatted.replace(
-      /<strong style="font-size:14px;color:var\(--accent\)">(\d+\.\s+)(.*?)(\s*\(.*?\))<\/strong>/g,
-      function(match, num, name, dist) {
-        const safeName = name.trim().replace(/'/g, '');
-        return '<strong style="font-size:14px;color:var(--accent)">' + num +
-          '<span style="cursor:pointer;text-decoration:underline" onclick="highlightPoi(\'' + safeName + '\')">' +
-          name + '</span>' + dist + '</strong>';
+      /<strong>(\d+)\.\s+(.*?)(?:\s*\(([\d.]+km away)\))?<\/strong>(\s*\(([\d.]+km away)\))?/g,
+      function(match, num, name, dist1, extra, dist2) {
+        const dist = dist1 || dist2 || '';
+        const cleanName = name.replace(/\([\d.]+km away\)/g, '').trim();
+        const safeName = cleanName.replace(/'/g, '');
+        return '<strong style="font-size:14px;color:var(--accent)">' + num + '. ' +
+          '<span style="cursor:pointer;color:#4f8ef7;text-decoration:underline;" onclick="highlightPoi(\'' + safeName + '\')">' +
+          cleanName + '</span>' +
+          (dist ? '<span style="color:var(--muted);font-size:12px"> (' + dist + ')</span>' : '') +
+          '</strong>';
       }
     );
 
     // Style each field label
-    formatted = formatted.replace(/About:/g, '<br><strong style="color:var(--text);font-size:12px">About:</strong>');
-    formatted = formatted.replace(/Hours:/g, '<strong style="color:var(--text);font-size:12px">Hours:</strong>');
-    formatted = formatted.replace(/Website:/g, '<strong style="color:var(--text);font-size:12px">Website:</strong>');
-    formatted = formatted.replace(/Category:/g, '<strong style="color:var(--text);font-size:12px">Category:</strong>'); 
+    formatted = formatted.replace(/About:/g, '<br><span style="color:#7c5cf6;font-size:11px;font-weight:500;letter-spacing:0.05em">About:</span>');
+    formatted = formatted.replace(/Hours:/g, '<span style="color:#7c5cf6;font-size:11px;font-weight:500;letter-spacing:0.05em">Hours:</span>');
+    formatted = formatted.replace(/Website:/g, '<span style="color:#7c5cf6;font-size:11px;font-weight:500;letter-spacing:0.05em">Website:</span>');
+    formatted = formatted.replace(/Category:/g, '<span style="color:#7c5cf6;font-size:11px;font-weight:500;letter-spacing:0.05em">Category:</span>');
 
     // Make website URLs clickable
     formatted = formatted.replace(
@@ -681,7 +699,6 @@ function addMsg(role, html) {
     // Add spacing between recommendation blocks
     formatted = formatted.replace(/\n\n/g, '</p><p style="margin-top:10px">');
     formatted = formatted.replace(/\n/g, '<br>');
-
     div.innerHTML = '<p>' + formatted + '</p>';
   } else {
     div.innerHTML = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
