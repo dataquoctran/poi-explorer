@@ -1,4 +1,4 @@
-# 🗺️ Twin Cities POI Explorer
+#  Twin Cities POI Explorer
 
 > *Never lack of places to go and things to do.*
 
