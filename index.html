@@ -291,48 +291,6 @@
     <input type="hidden" id="pending-lon" value="">
   </div>
 
-  <!-- Preferences -->
-  <!-- These filters get sent to the backend so Claude
-       can prioritize POIs matching the user's taste -->
-  <div class="section">
-    <label>Preferences</label>
-    <div class="filter-row">
-      <select id="ethnicity">
-        <option value="Any">Any cuisine</option>
-        <option value="Asian">Asian</option>
-        <option value="American">American</option>
-        <option value="Latin American">Latin American</option>
-        <option value="Middle Eastern & African">Middle Eastern & African</option>
-        <option value="European">European</option>
-      </select>
-      <select id="category">
-        <option value="ALL">All categories</option>
-        <option value="Food & Drink">Food & Drink</option>
-        <option value="Shopping">Shopping</option>
-        <option value="Leisure">Leisure</option>
-        <option value="Tourism">Tourism</option>
-        <option value="Health">Health</option>
-        <option value="Education">Education</option>
-      </select>
-    </div>
-  </div>
-
-  <!-- Visit History -->
-  <!-- This is the core "conversational AI" feature.
-       The chain of places you visited gets sent to Claude
-       so it can detect your pattern and suggest what's next -->
-  <div class="section">
-    <label>Places I visited today</label>
-    <div class="tags" id="tags">
-      <span style="font-size:11px;color:var(--muted);">No visits yet</span>
-    </div>
-    <div class="add-row">
-      <input type="text" id="tag-input" placeholder="Type a place name..."
-        onkeydown="if(event.key==='Enter') addTag()">
-      <button class="btn ghost" style="padding:7px 10px;" onclick="addTag()">Add</button>
-    </div>
-  </div>
-
   <!-- Chat -->
   <!-- This is a live chat with Claude. Each message
        includes the full visit history and nearby POIs
@@ -711,8 +669,8 @@ async function sendMsg() {
 
   const lat = parseFloat(document.getElementById('lat').value);
   const lon = parseFloat(document.getElementById('lon').value);
-  const ethnicity = document.getElementById('ethnicity').value;
-  const category = document.getElementById('category').value;
+  const ethnicity = 'Any';
+  const category = 'ALL';
 
   addMsg('user', msg);
   const loading = addMsg('loading',
