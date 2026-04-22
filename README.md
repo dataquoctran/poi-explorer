@@ -2,7 +2,7 @@
 
 > *Never lack of places to go and things to do.*
 
-A conversational AI web application that helps you discover nearby Points of Interest in the **Minneapolis–Saint Paul metro area** — powered by **Anthropic Claude**, **Snowflake**, and **Leaflet.js**.
+A conversational AI web application that helps you discover nearby Points of Interest in the **Minneapolis–Saint Paul metro area** 
 
 Instead of tapping through filters on a map app, just ask:
 
