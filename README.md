@@ -147,7 +147,7 @@ The `/chat` endpoint sends your message and the POI context to Claude without th
 
 ---
 
-## 📖 Academic Context
+##  Academic Context
 
 This project was built as the final project for **SEIS 767 – Conversational AI** at the University of St. Thomas (Spring 2026). It demonstrates five LLM topics from *Hands-On Large Language Models* (Alammar & Grootendorst, 2024):
 
@@ -159,7 +159,7 @@ This project was built as the final project for **SEIS 767 – Conversational AI
 
 ---
 
-## 📄 License
+##  License
 
 MIT License. See `LICENSE` for details.
 
