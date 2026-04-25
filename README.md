@@ -1,15 +1,4 @@
-##  Academic Context
 
-This project was built as the final project for **SEIS 767 – Conversational AI** at the University of St. Thomas (Spring 2026). It demonstrates five LLM topics from *Hands-On Large Language Models* (Alammar & Grootendorst, 2024):
-
-1. Prompt Engineering
-2. Tokens and Context Windows
-3. Generative Models and Sampling
-4. Retrieval-Augmented Generation (RAG)
-5. Conversational Memory and Multi-Turn Dialogue
-
-
----
 
 #  Twin Cities POI Explorer
 
@@ -23,7 +12,18 @@ Instead of tapping through filters on a map app, just ask:
 
 Claude answers with specific, context-aware recommendations drawn from real local data, with numbered pins that light up on the map as you chat.
 ---
+##  Academic Context
 
+This project was built as the final project for **SEIS 767 – Conversational AI** at the University of St. Thomas (Spring 2026). It demonstrates five LLM topics from *Hands-On Large Language Models* (Alammar & Grootendorst, 2024):
+
+1. Prompt Engineering
+2. Tokens and Context Windows
+3. Generative Models and Sampling
+4. Retrieval-Augmented Generation (RAG)
+5. Conversational Memory and Multi-Turn Dialogue
+
+
+---
 
 ##  Features
 
