@@ -77,7 +77,7 @@ It was loaded into Snowflake and processed through three layers:
 | `CUR_POI` | Curated layer — normalized fields, computed flags (`IS_LATE_NIGHT`, `DATA_QUALITY_SCORE`, `CITY_TIER`) |
 | `AGG_POI` | Aggregation layer — zipcode summaries, category pivot tables, materialized views |
 
-The app queries `CUR_POI.CUR_POI_PROCESSED` at runtime, filtered to a 20 km radius around the user's coordinates.
+The app queries `CUR_POI.CUR_POI_PROCESSED` at runtime, filtered to a 50 km radius around the user's coordinates.
 
 ---
 
